@@ -6,7 +6,7 @@ The project is used for personal purposes.
 
 ## Installation
 
-    git clone https://github.com/w3irdd/mpst
+    git clone https://github.com/fediasonin/fortigate_3
     pip install -r requirements.txt
 
 ## Configuration
