@@ -1,0 +1,6 @@
+.venv
+__pycache__/
+config/
+.DS_Store
+credentials.json
+filtered_addresses.txt
