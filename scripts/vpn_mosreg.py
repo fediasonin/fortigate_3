@@ -16,7 +16,7 @@ from openpyxl import load_workbook
 
 
 
-def run_vpn(d1, d2, custom_input_enabled=False):
+def run_vpn(d1, d2):
     new_column_names = {
         "time": "Время",
         "src.ip": "Внешний адрес",
@@ -39,10 +39,9 @@ def run_vpn(d1, d2, custom_input_enabled=False):
 
     ip_whitelist = dataparse.parse_ip_file("config/filtered_addresses.txt")
 
-    if custom_input_enabled:
-        json_list = dataparse.csv_to_json_list("input.csv", ip_whitelist)
-    else:
-        json_list = asyncio.run(get_json_list_vpn(d1, d2, ip_whitelist))
+
+    #json_list = dataparse.csv_to_json_list("input.csv", ip_whitelist)
+    json_list = asyncio.run(get_json_list_vpn(d1, d2, ip_whitelist))
 
     df = dataparse.json_to_dataframe(json_list)
     df = df.drop(columns=['uuid'])
@@ -51,6 +50,44 @@ def run_vpn(d1, d2, custom_input_enabled=False):
     dataparse.dataframe_to_excel(df, writer, 'Все события', new_column_names)
 
 
+
+    writer._save()
+    print(f"Saving the output to {output_file_xlsx}")
+
+    print("\nDone!")
+
+
+def run_vpn_csv():
+    new_column_names = {
+        "time": "Время",
+        "src.ip": "Внешний адрес",
+        "src.geo.country": "Страна",
+        "assigned_src_ip": "Выделенный адрес",
+        "subject.name": "УЗ",
+        "text": "Описание"
+    }
+
+    output_dir = 'output'
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+
+    current_time = time.localtime()
+    formatted_time = time.strftime('_%d-%m-%Y_%H-%M-%S', current_time)
+
+    output_file_xlsx = os.path.join(output_dir, f'events{formatted_time}.xlsx')
+
+    writer = pd.ExcelWriter(output_file_xlsx, engine='xlsxwriter')
+
+    ip_whitelist = dataparse.parse_ip_file("config/filtered_addresses.txt")
+
+    json_list = dataparse.csv_to_json_list("input.csv", ip_whitelist)
+    #json_list = asyncio.run(get_json_list_vpn(d1, d2, ip_whitelist))
+
+    df = dataparse.json_to_dataframe(json_list)
+    df = df.drop(columns=['uuid'])
+    new_column = ['time', 'src.ip', 'src.geo.country', 'assigned_src_ip', 'subject.name', 'text']
+    df = df[new_column]
+    dataparse.dataframe_to_excel(df, writer, 'Все события', new_column_names)
 
     writer._save()
     print(f"Saving the output to {output_file_xlsx}")

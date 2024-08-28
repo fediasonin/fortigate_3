@@ -12,7 +12,7 @@ from pdql_filteres import event_filters
 from event_analyzer import dataparse, visualize
 
 
-def run(d1, d2, custom_input_enabled=False):
+def run_api(d1, d2):
     new_column_names = {
         "time": "Время",
         "event_src.host": "fortigate",
@@ -35,10 +35,10 @@ def run(d1, d2, custom_input_enabled=False):
 
     ip_whitelist = dataparse.parse_ip_file("config/filtered_addresses.txt")
 
-    if custom_input_enabled:
-        json_list = dataparse.csv_to_json_list("input.csv", ip_whitelist)
-    else:
-        json_list = asyncio.run(get_json_list_from_API(ip_whitelist, d1, d2))
+
+    #json_list = dataparse.csv_to_json_list("input.csv", ip_whitelist)
+
+    json_list = asyncio.run(get_json_list_from_API(ip_whitelist, d1, d2))
 
     df = dataparse.json_to_dataframe(json_list)
     dataparse.dataframe_to_excel(df, writer, 'Все события', new_column_names)
@@ -54,6 +54,91 @@ def run(d1, d2, custom_input_enabled=False):
     print(f"Saving the output to {output_file_pdf}")
 
     print("\nDone!")
+
+
+async def run_csv():
+    new_column_names = {
+        "time": "Время",
+        "event_src.host": "fortigate",
+        "src.ip": "Атакующий",
+        "object.type": "Сигнатура",
+        "text": "Описание"
+    }
+
+    output_dir = 'output'
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+
+    current_time = time.localtime()
+    formatted_time = time.strftime('_%d-%m-%Y_%H-%M-%S', current_time)
+
+    output_file_pdf = os.path.join(output_dir, f'stats{formatted_time}.pdf')
+    output_file_xlsx = os.path.join(output_dir, f'events{formatted_time}.xlsx')
+
+    writer = pd.ExcelWriter(output_file_xlsx, engine='xlsxwriter')
+
+    ip_whitelist = dataparse.parse_ip_file("config/filtered_addresses.txt")
+
+    json_list = dataparse.csv_to_json_list("input.csv", ip_whitelist)
+
+    #json_list = asyncio.run(get_json_list_from_API(ip_whitelist, d1, d2))
+
+    df = dataparse.json_to_dataframe(json_list)
+    ip_cache = {}
+
+    async with aiohttp.ClientSession() as session:
+        count = 0
+        tasks = []
+
+
+        # Проходимся по каждой строке DataFrame
+        for idx, row in df.iterrows():
+            src_ip = row.get('src.ip')
+            dst_ip = row.get('dst.ip')
+
+            # Обработка src_ip
+            if src_ip and not dataparse.ip_in_list(src_ip, ip_whitelist):
+                if src_ip not in ip_cache:
+                    task = asyncio.ensure_future(api_client.get_country_by_ip(session, src_ip))
+                    tasks.append((idx, 'src', task))  # Сохраняем индекс, тип IP и задачу
+
+            # Обработка dst_ip
+            if dst_ip and not dataparse.ip_in_list(dst_ip, ip_whitelist):
+                if dst_ip not in ip_cache:
+                    task = asyncio.ensure_future(api_client.get_country_by_ip(session, dst_ip))
+                    tasks.append((idx, 'dst', task))  # Сохраняем индекс, тип IP и задачу
+
+        # Выполняем асинхронные запросы
+        results = await asyncio.gather(*[task for _, _, task in tasks])
+
+        # Обновляем DataFrame новыми данными
+        for (idx, ip_type, _), result in zip(tasks, results):
+            if ip_type == 'src':
+                ip_cache[df.at[idx, 'src.ip']] = result
+                df.at[idx, 'src.geo.country'] = result
+            elif ip_type == 'dst':
+                ip_cache[df.at[idx, 'dst.ip']] = result
+                df.at[idx, 'dst.geo.country'] = result
+            count += 1
+
+        print(f"Processed {count} IPs")
+
+    dataparse.dataframe_to_excel(df, writer, 'Все события', new_column_names)
+    dataparse.group_by_src_ip_to_excel(df, writer, 'Группировка по атакующим', new_column_names)
+    dataparse.group_by_unique_src_ip(df, writer, 'Уникальные атакующие адреса', new_column_names)
+    dataparse.group_by_unique_dst_combinations(df, writer, 'Уникальные ресурсы', new_column_names)
+    dataparse.create_summary_statistics(df, writer, 'Статистика')
+
+    writer._save()
+    print(f"Saving the output to {output_file_xlsx}")
+
+    visualize.visualize_data_to_pdf(json_list, output_file_pdf)
+    print(f"Saving the output to {output_file_pdf}")
+
+    print("\nDone!")
+
+
+
 
 
 

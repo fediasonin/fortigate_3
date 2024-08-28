@@ -1,3 +1,4 @@
+import asyncio
 import time
 
 from console_ui import raws
@@ -13,7 +14,7 @@ def print_main():
 
 def select_script(num):
     if num == '1':
-        handle_api_or_csv(run_fortinet)
+        handle_api_or_csv()
     elif num == '2':
         handle_vpn_task()
     else:
@@ -44,24 +45,22 @@ def execute_with_timing(task_func, *args):
     execution_time = end_time - start_time
     print(f"Программа выполнялась {execution_time:.2f} секунд.")
 
-def run_fortinet():
-    start, stop = get_time_interval()
-    if start and stop:
-        execute_with_timing(fortinet.run, start, stop)
+
 
 def run_vpn():
     start, stop = get_time_interval()
     if start and stop:
         execute_with_timing(vpn_mosreg.run_vpn, start, stop)
 
-def handle_api_or_csv(task_func):
+def handle_api_or_csv():
     print(raws.SCENARIOS_DOWLD)
     print(raws.GREETING_LINE, end='')
     select = input()
     if select == '1':
-        task_func()
+        start, stop = get_time_interval()
+        fortinet.run_api(start, stop)
     elif select == '2':
-        task_func("", "", True)
+        asyncio.run(fortinet.run_csv())
     else:
         print(raws.WRONG_ARGS)
 
@@ -70,7 +69,15 @@ def handle_vpn_task():
     print(raws.GREETING_LINE, end='')
     select = input()
     if select == '1':
-        handle_api_or_csv(run_vpn)
+        print(raws.SCENARIOS_DOWLD)
+        print(raws.GREETING_LINE, end='')
+        select = input()
+        if select == '1':
+            start, stop = get_time_interval()
+            vpn_mosreg.run_vpn(start, stop)
+        if select == '2':
+            vpn_mosreg.run_vpn_csv()
+
     elif select == '2':
         input_f = input('введите файл для обработки: ')
         output_f = input('введите файл для выгрузки: ')
